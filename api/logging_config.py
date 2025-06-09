@@ -42,6 +42,17 @@ def setup_logging(format: str = None):
         force=True
     )
 
+    # 设置特定模块的日志级别以减少噪音
+    # watchfiles 模块会产生大量文件变化检测日志，设置为 WARNING 级别
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
+
+    # 其他可能产生噪音的模块
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     # Initial debug message to confirm configuration
     logger = logging.getLogger(__name__)
     logger.debug(f"Log level set to {log_level_str}, log file: {resolved_path}")
+    logger.info("🔧 日志配置完成，已过滤噪音日志")

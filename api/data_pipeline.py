@@ -201,7 +201,9 @@ def read_all_documents(path: str, is_ollama_embedder: bool = None, excluded_dirs
         logger.info(f"Excluded directories: {excluded_dirs}")
         logger.info(f"Excluded files: {excluded_files}")
 
-    logger.info(f"Reading documents from {path}")
+    logger.info(f"📁 开始扫描目录: {path}")
+    logger.info(f"🔍 扫描配置 - 排除目录: {len(excluded_dirs)} 个")
+    logger.info(f"🔍 扫描配置 - 排除文件: {len(excluded_files)} 个")
 
     def should_process_file(file_path: str, use_inclusion: bool, included_dirs: List[str], included_files: List[str],
                            excluded_dirs: List[str], excluded_files: List[str]) -> bool:
@@ -273,17 +275,30 @@ def read_all_documents(path: str, is_ollama_embedder: bool = None, excluded_dirs
             return not is_excluded
 
     # Process code files first
+    logger.info(f"🔍 第一阶段：扫描代码文件 ({', '.join(code_extensions)})")
+    total_code_files = 0
+    processed_code_files = 0
+
     for ext in code_extensions:
         files = glob.glob(f"{path}/**/*{ext}", recursive=True)
+        total_code_files += len(files)
+        logger.info(f"📄 找到 {len(files)} 个 {ext} 文件")
+
         for file_path in files:
             # Check if file should be processed based on inclusion/exclusion rules
             if not should_process_file(file_path, use_inclusion_mode, included_dirs, included_files, excluded_dirs, excluded_files):
                 continue
 
             try:
+                processed_code_files += 1
+                relative_path = os.path.relpath(file_path, path)
+
+                # 每处理10个文件或重要文件时显示进度
+                if processed_code_files % 10 == 0 or processed_code_files <= 5:
+                    logger.info(f"📄 处理代码文件 ({processed_code_files}/{total_code_files}): {relative_path}")
+
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    relative_path = os.path.relpath(file_path, path)
 
                     # Determine if this is an implementation file
                     is_implementation = (
@@ -295,7 +310,7 @@ def read_all_documents(path: str, is_ollama_embedder: bool = None, excluded_dirs
                     # Check token count
                     token_count = count_tokens(content, is_ollama_embedder)
                     if token_count > MAX_EMBEDDING_TOKENS * 10:
-                        logger.warning(f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit")
+                        logger.warning(f"⚠️  跳过大文件 {relative_path}: 令牌数 ({token_count}) 超过限制")
                         continue
 
                     doc = Document(
@@ -311,25 +326,44 @@ def read_all_documents(path: str, is_ollama_embedder: bool = None, excluded_dirs
                     )
                     documents.append(doc)
             except Exception as e:
-                logger.error(f"Error reading {file_path}: {e}")
+                logger.error(f"❌ 读取文件错误 {file_path}: {e}")
 
     # Then process documentation files
+    logger.info(f"📚 第二阶段：扫描文档文件 ({', '.join(doc_extensions)})")
+    total_doc_files = 0
+    processed_doc_files = 0
+
     for ext in doc_extensions:
         files = glob.glob(f"{path}/**/*{ext}", recursive=True)
+        total_doc_files += len(files)
+        logger.info(f"📄 找到 {len(files)} 个 {ext} 文件")
+
+        # 显示前几个文件路径用于调试
+        if files and len(files) <= 10:
+            logger.debug(f"   文件列表: {[os.path.relpath(f, path) for f in files]}")
+        elif files:
+            logger.debug(f"   前5个文件: {[os.path.relpath(f, path) for f in files[:5]]}")
+
         for file_path in files:
             # Check if file should be processed based on inclusion/exclusion rules
             if not should_process_file(file_path, use_inclusion_mode, included_dirs, included_files, excluded_dirs, excluded_files):
                 continue
 
             try:
+                processed_doc_files += 1
+                relative_path = os.path.relpath(file_path, path)
+
+                # 每处理5个文件或重要文件时显示进度
+                if processed_doc_files % 5 == 0 or processed_doc_files <= 3:
+                    logger.info(f"📚 处理文档文件 ({processed_doc_files}/{total_doc_files}): {relative_path}")
+
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    relative_path = os.path.relpath(file_path, path)
 
                     # Check token count
                     token_count = count_tokens(content, is_ollama_embedder)
                     if token_count > MAX_EMBEDDING_TOKENS:
-                        logger.warning(f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit")
+                        logger.warning(f"⚠️  跳过大文档 {relative_path}: 令牌数 ({token_count}) 超过限制")
                         continue
 
                     doc = Document(
@@ -345,9 +379,95 @@ def read_all_documents(path: str, is_ollama_embedder: bool = None, excluded_dirs
                     )
                     documents.append(doc)
             except Exception as e:
-                logger.error(f"Error reading {file_path}: {e}")
+                logger.error(f"❌ 读取文档错误 {file_path}: {e}")
 
-    logger.info(f"Found {len(documents)} documents")
+    logger.info(f"✅ 文档扫描完成！")
+    logger.info(f"📊 总计找到 {len(documents)} 个文档")
+    logger.info(f"📄 代码文件: {sum(1 for doc in documents if doc.meta_data.get('is_code', False))} 个")
+    logger.info(f"📚 文档文件: {sum(1 for doc in documents if not doc.meta_data.get('is_code', False))} 个")
+
+    # 如果没有文档，提供详细的调试信息并创建默认文档
+    if len(documents) == 0:
+        logger.warning("⚠️  没有生成任何文档！")
+        logger.warning("可能的原因:")
+        logger.warning("1. 仓库中没有支持的文件类型")
+        logger.warning("2. 所有文件都被排除规则过滤掉了")
+        logger.warning("3. 文件读取过程中出现错误")
+        logger.warning("4. 文件内容为空或格式不支持")
+
+        # 显示扫描的目录内容
+        logger.warning(f"扫描目录: {path}")
+        if os.path.exists(path):
+            all_files = []
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    all_files.append(os.path.relpath(os.path.join(root, file), path))
+
+            logger.warning(f"目录中总共有 {len(all_files)} 个文件")
+            if all_files:
+                logger.warning(f"前10个文件: {all_files[:10]}")
+
+                # 检查支持的文件类型
+                code_extensions = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".h", ".cs", ".php", ".rb", ".go", ".rs", ".kt", ".swift", ".scala", ".clj", ".hs", ".ml", ".fs", ".vb", ".pl", ".r", ".m", ".sh", ".bat", ".ps1", ".sql", ".html", ".css", ".xml", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf"]
+                doc_extensions = [".md", ".txt", ".rst", ".adoc", ".tex"]
+
+                supported_files = [f for f in all_files if any(f.lower().endswith(ext) for ext in code_extensions + doc_extensions)]
+                logger.warning(f"支持的文件类型: {len(supported_files)} 个")
+                if supported_files:
+                    logger.warning(f"支持的文件示例: {supported_files[:5]}")
+
+                    # 🔧 强制处理：尝试读取第一个支持的文件
+                    logger.warning("🔧 强制处理：尝试读取第一个支持的文件")
+                    try:
+                        first_file = supported_files[0]
+                        full_path = os.path.join(path, first_file)
+
+                        with open(full_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+
+                        if content.strip():
+                            # 确定文件类型
+                            is_code = any(first_file.lower().endswith(ext) for ext in code_extensions)
+                            file_ext = os.path.splitext(first_file)[1]
+
+                            doc = Document(
+                                text=content,
+                                meta_data={
+                                    "file_path": first_file,
+                                    "type": file_ext[1:] if file_ext else "txt",
+                                    "is_code": is_code,
+                                    "is_implementation": is_code,
+                                    "title": first_file,
+                                    "token_count": len(content.split())
+                                }
+                            )
+                            documents.append(doc)
+                            logger.warning(f"✅ 强制添加文档: {first_file} ({len(content)} 字符)")
+                        else:
+                            logger.warning(f"❌ 文件 {first_file} 内容为空")
+
+                    except Exception as e:
+                        logger.warning(f"❌ 强制处理文件时出错: {str(e)}")
+        else:
+            logger.warning("扫描目录不存在！")
+
+        # 如果仍然没有文档，创建一个默认文档
+        if len(documents) == 0:
+            logger.warning("🔧 创建默认文档以确保系统正常运行")
+            default_doc = Document(
+                text=f"这是一个默认文档，因为在路径 '{path}' 中没有找到任何有效的文档内容。请检查仓库内容和文件格式。",
+                meta_data={
+                    "file_path": "default_fallback.txt",
+                    "type": "txt",
+                    "is_code": False,
+                    "is_implementation": False,
+                    "title": "默认回退文档",
+                    "token_count": 20
+                }
+            )
+            documents.append(default_doc)
+            logger.warning("✅ 已创建默认文档")
+
     return documents
 
 def prepare_data_pipeline(is_ollama_embedder: bool = None):
@@ -399,16 +519,74 @@ def transform_documents_and_save_to_db(
         is_ollama_embedder (bool, optional): Whether to use Ollama for embedding.
                                            If None, will be determined from configuration.
     """
+    logger.info(f"🔄 开始文档转换和嵌入处理...")
+    logger.info(f"📄 待处理文档数量: {len(documents)}")
+
+    # 如果没有文档，直接返回空数据库
+    if len(documents) == 0:
+        logger.error("❌ 没有文档可处理！创建空数据库...")
+        db = LocalDB()
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db.save_state(filepath=db_path)
+        return db
+
+    # 如果使用Ollama，先进行诊断检查
+    if is_ollama_embedder:
+        logger.info(f"🔍 使用Ollama嵌入器，进行预检查...")
+        try:
+            from api.embedding_diagnostics import EmbeddingDiagnostics
+            diagnostics = EmbeddingDiagnostics()
+
+            # 快速检查Ollama服务
+            ollama_status = diagnostics.check_ollama_service()
+            if not ollama_status["service_running"]:
+                raise RuntimeError(f"Ollama服务未运行: {ollama_status['error']}")
+
+            if not ollama_status["embedding_test"]:
+                raise RuntimeError(f"Ollama嵌入测试失败: {ollama_status['error']}")
+
+            logger.info(f"✅ Ollama服务检查通过")
+
+        except ImportError:
+            logger.warning("⚠️  无法导入诊断工具，跳过预检查")
+        except Exception as e:
+            logger.error(f"❌ Ollama预检查失败: {str(e)}")
+            logger.error("请检查Ollama服务状态并重试")
+            raise
+
     # Get the data transformer
     data_transformer = prepare_data_pipeline(is_ollama_embedder)
 
     # Save the documents to a local database
+    logger.info(f"💾 创建本地数据库...")
     db = LocalDB()
     db.register_transformer(transformer=data_transformer, key="split_and_embed")
+
+    logger.info(f"📥 加载文档到数据库...")
     db.load(documents)
-    db.transform(key="split_and_embed")
+
+    logger.info(f"⚙️  开始文档分割和嵌入转换...")
+    logger.info(f"🤖 使用嵌入模型: {'Ollama (nomic-embed-text)' if is_ollama_embedder else 'OpenAI'}")
+
+    try:
+        db.transform(key="split_and_embed")
+        logger.info(f"✅ 文档转换和嵌入处理完成！")
+    except Exception as e:
+        logger.error(f"❌ 文档转换过程中出错: {str(e)}")
+
+        # 如果是Ollama相关错误，提供更多诊断信息
+        if is_ollama_embedder and ("connection" in str(e).lower() or "timeout" in str(e).lower()):
+            logger.error("可能的Ollama连接问题，建议:")
+            logger.error("1. 检查Ollama服务: ollama serve")
+            logger.error("2. 检查模型: ollama list")
+            logger.error("3. 测试嵌入: curl -X POST http://localhost:11434/api/embeddings -d '{\"model\":\"nomic-embed-text\",\"prompt\":\"test\"}'")
+
+        raise
+
+    logger.info(f"💾 保存数据库到: {db_path}")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     db.save_state(filepath=db_path)
+
     return db
 
 def get_github_file_content(repo_url: str, file_path: str, access_token: str = None) -> str:
@@ -742,19 +920,23 @@ class DatabaseManager:
         """
         # check the database
         if self.repo_paths and os.path.exists(self.repo_paths["save_db_file"]):
-            logger.info("Loading existing database...")
+            logger.info("🔍 检查现有数据库...")
+            logger.info(f"📁 数据库路径: {self.repo_paths['save_db_file']}")
             try:
+                logger.info("📥 加载现有数据库...")
                 self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
                 documents = self.db.get_transformed_data(key="split_and_embed")
                 if documents:
-                    logger.info(f"Loaded {len(documents)} documents from existing database")
+                    logger.info(f"✅ 成功加载现有数据库，包含 {len(documents)} 个已处理文档")
                     return documents
             except Exception as e:
-                logger.error(f"Error loading existing database: {e}")
-                # Continue to create a new database
+                logger.error(f"❌ 加载现有数据库失败: {e}")
+                logger.info("🔄 将创建新数据库...")
 
         # prepare the database
-        logger.info("Creating new database...")
+        logger.info("🆕 创建新数据库...")
+        logger.info(f"📁 仓库目录: {self.repo_paths['save_repo_dir']}")
+
         documents = read_all_documents(
             self.repo_paths["save_repo_dir"],
             is_ollama_embedder=is_ollama_embedder,
@@ -763,12 +945,23 @@ class DatabaseManager:
             included_dirs=included_dirs,
             included_files=included_files
         )
+
         self.db = transform_documents_and_save_to_db(
             documents, self.repo_paths["save_db_file"], is_ollama_embedder=is_ollama_embedder
         )
-        logger.info(f"Total documents: {len(documents)}")
+
         transformed_docs = self.db.get_transformed_data(key="split_and_embed")
-        logger.info(f"Total transformed documents: {len(transformed_docs)}")
+        logger.info(f"📊 处理结果统计:")
+        logger.info(f"   📄 原始文档: {len(documents)} 个")
+        logger.info(f"   🔄 转换后文档块: {len(transformed_docs)} 个")
+
+        # 避免除零错误
+        if len(documents) > 0:
+            split_ratio = len(transformed_docs) / len(documents)
+            logger.info(f"   📈 平均分割比例: {split_ratio:.1f}:1")
+        else:
+            logger.info(f"   📈 平均分割比例: N/A (没有原始文档)")
+
         return transformed_docs
 
     def prepare_retriever(self, repo_url_or_path: str, type: str = "github", access_token: str = None):

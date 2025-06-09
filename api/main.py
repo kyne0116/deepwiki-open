@@ -42,11 +42,22 @@ if __name__ == "__main__":
     logger.info(f"Starting Streaming API on port {port}")
 
     # Run the FastAPI app with uvicorn
-    # Disable reload in production/Docker environment
+    # 为了避免 watchfiles 的噪音日志，在开发环境中也禁用 reload
+    # 如果需要重启服务器，请手动重启
     is_development = os.environ.get("NODE_ENV") != "production"
+    enable_reload = os.environ.get("ENABLE_RELOAD", "false").lower() == "true"
+
+    if enable_reload:
+        logger.info("🔄 启用了文件监控和自动重载")
+        logger.info("⚠️  这会产生 watchfiles 日志，如需禁用请设置 ENABLE_RELOAD=false")
+    else:
+        logger.info("🔧 已禁用文件监控以减少日志噪音")
+        logger.info("💡 如需启用自动重载，请设置 ENABLE_RELOAD=true")
+
     uvicorn.run(
         "api.api:app",
         host="0.0.0.0",
         port=port,
-        reload=is_development
+        reload=enable_reload,
+        log_level="info"
     )

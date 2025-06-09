@@ -93,8 +93,10 @@ async def handle_websocket_chat(websocket: WebSocket):
                 included_files = [unquote(file_pattern) for file_pattern in request.included_files.split('\n') if file_pattern.strip()]
                 logger.info(f"Using custom included files: {included_files}")
 
+            logger.info(f"🚀 开始为仓库准备检索器: {request.repo_url}")
+            logger.info(f"🔧 仓库类型: {request.type}")
             request_rag.prepare_retriever(request.repo_url, request.type, request.token, excluded_dirs, excluded_files, included_dirs, included_files)
-            logger.info(f"Retriever prepared for {request.repo_url}")
+            logger.info(f"✅ 检索器准备完成: {request.repo_url}")
         except ValueError as e:
             if "No valid documents with embeddings found" in str(e):
                 logger.error(f"No valid embeddings found: {str(e)}")
@@ -191,13 +193,15 @@ async def handle_websocket_chat(websocket: WebSocket):
 
                 # Try to perform RAG retrieval
                 try:
+                    logger.info(f"🔍 开始检索相关文档...")
+                    logger.info(f"🔍 检索查询: {rag_query}")
                     # This will use the actual RAG implementation
                     retrieved_documents = request_rag(rag_query, language=request.language)
 
                     if retrieved_documents and retrieved_documents[0].documents:
                         # Format context for the prompt in a more structured way
                         documents = retrieved_documents[0].documents
-                        logger.info(f"Retrieved {len(documents)} documents")
+                        logger.info(f"📄 成功检索到 {len(documents)} 个相关文档")
 
                         # Group documents by file path
                         docs_by_file = {}
@@ -206,6 +210,10 @@ async def handle_websocket_chat(websocket: WebSocket):
                             if file_path not in docs_by_file:
                                 docs_by_file[file_path] = []
                             docs_by_file[file_path].append(doc)
+
+                        logger.info(f"📁 文档分布: {len(docs_by_file)} 个文件")
+                        for file_path, docs in docs_by_file.items():
+                            logger.info(f"   📄 {file_path}: {len(docs)} 个文档块")
 
                         # Format context text with file path grouping
                         context_parts = []
@@ -219,8 +227,9 @@ async def handle_websocket_chat(websocket: WebSocket):
 
                         # Join all parts with clear separation
                         context_text = "\n\n" + "-" * 10 + "\n\n".join(context_parts)
+                        logger.info(f"✅ 上下文准备完成，总长度: {len(context_text)} 字符")
                     else:
-                        logger.warning("No documents retrieved from RAG")
+                        logger.warning("⚠️  RAG 检索未找到相关文档")
                 except Exception as e:
                     logger.error(f"Error in RAG retrieval: {str(e)}")
                     # Continue without RAG if there's an error

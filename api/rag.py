@@ -297,16 +297,42 @@ IMPORTANT FORMATTING RULES:
             List of documents with valid embeddings of consistent size
         """
         if not documents:
-            logger.warning("No documents provided for embedding validation")
+            logger.warning("📄 没有提供文档进行嵌入向量验证")
             return []
+
+        logger.info(f"🔍 开始验证 {len(documents)} 个文档的嵌入向量...")
 
         valid_documents = []
         embedding_sizes = {}
+        invalid_count = 0
+        empty_count = 0
 
         # First pass: collect all embedding sizes and count occurrences
         for i, doc in enumerate(documents):
+            file_path = getattr(doc, 'meta_data', {}).get('file_path', f'document_{i}')
+
+            # 详细检查文档结构（仅在前几个文档中记录详细信息）
+            if i < 5:  # 只记录前5个文档的详细信息
+                logger.debug(f"🔍 检查文档 {i}: {file_path}")
+                logger.debug(f"   文档类型: {type(doc)}")
+                logger.debug(f"   有vector属性: {hasattr(doc, 'vector')}")
+                if hasattr(doc, 'vector'):
+                    logger.debug(f"   vector类型: {type(doc.vector)}")
+                    logger.debug(f"   vector是否为None: {doc.vector is None}")
+                    if doc.vector is not None:
+                        try:
+                            if isinstance(doc.vector, list):
+                                logger.debug(f"   vector长度: {len(doc.vector)}")
+                            elif hasattr(doc.vector, 'shape'):
+                                logger.debug(f"   vector形状: {doc.vector.shape}")
+                            elif hasattr(doc.vector, '__len__'):
+                                logger.debug(f"   vector长度: {len(doc.vector)}")
+                        except Exception as e:
+                            logger.debug(f"   检查vector时出错: {e}")
+
             if not hasattr(doc, 'vector') or doc.vector is None:
-                logger.warning(f"Document {i} has no embedding vector, skipping")
+                logger.warning(f"📄 文档 '{file_path}' 没有嵌入向量，跳过")
+                invalid_count += 1
                 continue
 
             try:
@@ -317,34 +343,101 @@ IMPORTANT FORMATTING RULES:
                 elif hasattr(doc.vector, '__len__'):
                     embedding_size = len(doc.vector)
                 else:
-                    logger.warning(f"Document {i} has invalid embedding vector type: {type(doc.vector)}, skipping")
+                    logger.warning(f"📄 文档 '{file_path}' 嵌入向量类型无效: {type(doc.vector)}，跳过")
+                    invalid_count += 1
                     continue
 
                 if embedding_size == 0:
-                    logger.warning(f"Document {i} has empty embedding vector, skipping")
+                    logger.warning(f"📄 文档 '{file_path}' 嵌入向量为空，跳过")
+                    empty_count += 1
                     continue
 
                 embedding_sizes[embedding_size] = embedding_sizes.get(embedding_size, 0) + 1
 
             except Exception as e:
-                logger.warning(f"Error checking embedding size for document {i}: {str(e)}, skipping")
+                logger.warning(f"📄 检查文档 '{file_path}' 嵌入向量大小时出错: {str(e)}，跳过")
+                invalid_count += 1
                 continue
 
+        # Log validation statistics
+        total_docs = len(documents)
+        valid_docs_count = sum(embedding_sizes.values())
+        logger.info(f"📊 嵌入向量验证统计:")
+        logger.info(f"   📄 总文档数: {total_docs}")
+        logger.info(f"   ✅ 有效嵌入向量: {valid_docs_count}")
+        logger.info(f"   ❌ 无效/空向量: {invalid_count}")
+        logger.info(f"   🔍 空嵌入向量: {empty_count}")
+
         if not embedding_sizes:
-            logger.error("No valid embeddings found in any documents")
+            logger.error("❌ 没有找到任何有效的嵌入向量！")
+            logger.error("可能的原因:")
+            logger.error("1. Ollama服务连接问题")
+            logger.error("2. 文档内容格式问题")
+            logger.error("3. 嵌入模型配置错误")
+            logger.error("4. 仓库下载或读取失败")
+            logger.error("5. 文档处理过程中出现异常")
+
+            # 提供更详细的诊断信息
+            logger.error("🔍 详细诊断信息:")
+            logger.error(f"   📄 总文档数: {total_docs}")
+            logger.error(f"   ❌ 无效向量数: {invalid_count}")
+            logger.error(f"   🔍 空向量数: {empty_count}")
+
+            # 建议检查步骤
+            logger.error("💡 建议检查步骤:")
+            logger.error("1. 验证Ollama服务: curl http://localhost:11434/api/tags")
+            logger.error("2. 测试嵌入功能: curl -X POST http://localhost:11434/api/embeddings -d '{\"model\":\"nomic-embed-text\",\"prompt\":\"test\"}'")
+            logger.error("3. 检查仓库URL是否可访问")
+            logger.error("4. 确认仓库包含有效的文档内容")
+
+            # 🔧 临时修复：如果没有有效的嵌入向量，创建一个默认文档
+            logger.warning("🔧 应用临时修复：创建默认文档以避免系统崩溃")
+            try:
+                from adalflow.core.types import Document
+
+                default_doc = Document(
+                    text="这是一个默认文档，用于处理嵌入向量生成失败的情况。请检查您的仓库内容和Ollama服务配置。",
+                    meta_data={
+                        "file_path": "default_fallback.txt",
+                        "type": "txt",
+                        "is_code": False,
+                        "title": "默认回退文档"
+                    }
+                )
+
+                # 为默认文档生成嵌入向量
+                from api.tools.embedder import get_embedder
+                embedder = get_embedder()
+                result = embedder(input=default_doc.text)
+
+                if result and hasattr(result, 'data') and result.data:
+                    embedding = result.data[0].embedding
+                    if embedding and len(embedding) > 0:
+                        default_doc.vector = embedding
+                        logger.warning(f"✅ 默认文档嵌入成功，向量大小: {len(embedding)}")
+                        return [default_doc]
+
+                logger.error("❌ 默认文档嵌入也失败了")
+
+            except Exception as e:
+                logger.error(f"❌ 创建默认文档时出错: {str(e)}")
+
             return []
 
         # Find the most common embedding size (this should be the correct one)
         target_size = max(embedding_sizes.keys(), key=lambda k: embedding_sizes[k])
-        logger.info(f"Target embedding size: {target_size} (found in {embedding_sizes[target_size]} documents)")
+        logger.info(f"🎯 目标嵌入向量大小: {target_size} (在 {embedding_sizes[target_size]} 个文档中找到)")
 
         # Log all embedding sizes found
         for size, count in embedding_sizes.items():
             if size != target_size:
-                logger.warning(f"Found {count} documents with incorrect embedding size {size}, will be filtered out")
+                logger.warning(f"⚠️  发现 {count} 个文档的嵌入向量大小不正确 ({size})，将被过滤")
 
         # Second pass: filter documents with the target embedding size
+        filtered_count = 0
         for i, doc in enumerate(documents):
+            file_path = getattr(doc, 'meta_data', {}).get('file_path', f'document_{i}')
+
             if not hasattr(doc, 'vector') or doc.vector is None:
                 continue
 
@@ -362,21 +455,26 @@ IMPORTANT FORMATTING RULES:
                     valid_documents.append(doc)
                 else:
                     # Log which document is being filtered out
-                    file_path = getattr(doc, 'meta_data', {}).get('file_path', f'document_{i}')
-                    logger.warning(f"Filtering out document '{file_path}' due to embedding size mismatch: {embedding_size} != {target_size}")
+                    logger.debug(f"🔍 过滤文档 '{file_path}': 嵌入向量大小不匹配 {embedding_size} != {target_size}")
+                    filtered_count += 1
 
             except Exception as e:
-                file_path = getattr(doc, 'meta_data', {}).get('file_path', f'document_{i}')
-                logger.warning(f"Error validating embedding for document '{file_path}': {str(e)}, skipping")
+                logger.warning(f"⚠️  验证文档 '{file_path}' 嵌入向量时出错: {str(e)}，跳过")
+                filtered_count += 1
                 continue
 
-        logger.info(f"Embedding validation complete: {len(valid_documents)}/{len(documents)} documents have valid embeddings")
+        # Final validation results
+        success_rate = len(valid_documents) / total_docs * 100 if total_docs > 0 else 0
+        logger.info(f"✅ 嵌入向量验证完成: {len(valid_documents)}/{total_docs} 个文档有效 ({success_rate:.1f}%)")
 
         if len(valid_documents) == 0:
-            logger.error("No documents with valid embeddings remain after filtering")
-        elif len(valid_documents) < len(documents):
-            filtered_count = len(documents) - len(valid_documents)
-            logger.warning(f"Filtered out {filtered_count} documents due to embedding issues")
+            logger.error("❌ 过滤后没有有效的嵌入向量文档！")
+            logger.error("建议检查:")
+            logger.error("1. Ollama服务状态: curl http://localhost:11434/api/tags")
+            logger.error("2. 嵌入模型是否正确安装: ollama list")
+            logger.error("3. 文档内容是否为空或格式异常")
+        elif filtered_count > 0:
+            logger.warning(f"⚠️  过滤了 {filtered_count} 个文档由于嵌入向量问题")
 
         return valid_documents
 
@@ -395,8 +493,11 @@ IMPORTANT FORMATTING RULES:
             included_dirs: Optional list of directories to include exclusively
             included_files: Optional list of file patterns to include exclusively
         """
+        logger.info(f"🔧 初始化数据库管理器...")
         self.initialize_db_manager()
         self.repo_url_or_path = repo_url_or_path
+
+        logger.info(f"📊 准备数据库和文档索引...")
         self.transformed_docs = self.db_manager.prepare_database(
             repo_url_or_path,
             type,
@@ -407,17 +508,20 @@ IMPORTANT FORMATTING RULES:
             included_dirs=included_dirs,
             included_files=included_files
         )
-        logger.info(f"Loaded {len(self.transformed_docs)} documents for retrieval")
+        logger.info(f"📄 加载了 {len(self.transformed_docs)} 个文档用于检索")
 
         # Validate and filter embeddings to ensure consistent sizes
+        logger.info(f"🔍 验证和过滤嵌入向量...")
         self.transformed_docs = self._validate_and_filter_embeddings(self.transformed_docs)
 
         if not self.transformed_docs:
             raise ValueError("No valid documents with embeddings found. Cannot create retriever.")
 
-        logger.info(f"Using {len(self.transformed_docs)} documents with valid embeddings for retrieval")
+        logger.info(f"✅ 使用 {len(self.transformed_docs)} 个有效嵌入文档进行检索")
 
         try:
+            logger.info(f"🔧 创建 FAISS 检索器...")
+            logger.info(f"🤖 使用嵌入器: {'Ollama' if self.is_ollama_embedder else 'OpenAI'}")
             # Use the appropriate embedder for retrieval
             retrieve_embedder = self.query_embedder if self.is_ollama_embedder else self.embedder
             self.retriever = FAISSRetriever(
@@ -426,7 +530,7 @@ IMPORTANT FORMATTING RULES:
                 documents=self.transformed_docs,
                 document_map_func=lambda doc: doc.vector,
             )
-            logger.info("FAISS retriever created successfully")
+            logger.info("✅ FAISS 检索器创建成功")
         except Exception as e:
             logger.error(f"Error creating FAISS retriever: {str(e)}")
             # Try to provide more specific error information

@@ -9,16 +9,19 @@ DeepWiki supports local AI models through Ollama, which is perfect if you want t
 ## Step 1: Install Ollama
 
 ### For Windows
+
 - Download Ollama from the [official website](https://ollama.com/download)
 - Run the installer and follow the on-screen instructions
 - After installation, Ollama will run in the background (check your system tray)
 
 ### For macOS
+
 - Download Ollama from the [official website](https://ollama.com/download)
 - Open the downloaded file and drag Ollama to your Applications folder
 - Launch Ollama from your Applications folder
 
 ### For Linux
+
 - Run the following command:
   ```bash
   curl -fsSL https://ollama.com/install.sh | sh
@@ -38,12 +41,14 @@ The first command downloads the embedding model that DeepWiki uses to understand
 ## Step 3: Set Up DeepWiki
 
 Clone the DeepWiki repository:
+
 ```bash
 git clone https://github.com/AsyncFuncAI/deepwiki-open.git
 cd deepwiki-open
 ```
 
 Create a `.env` file in the project root:
+
 ```
 # No need for API keys when using Ollama locally
 PORT=8001
@@ -52,12 +57,14 @@ OLLAMA_HOST=your_ollama_host # (default: http://localhost:11434)
 ```
 
 Start the backend:
+
 ```bash
 pip install -r api/requirements.txt
 python -m api.main
 ```
 
 Start the frontend:
+
 ```bash
 npm install
 npm run dev
@@ -72,17 +79,31 @@ npm run dev
 
 ![Ollama Option](screenshots/Ollama.png)
 
+## 主要命令和路径信息
+
+- 项目位置：D:\02_Dev\Workspace\GitHub\other\deepwiki-open
+- 后端启动命令：`python -m api.main`
+- 前端启动命令：`npm run dev`
+- Ollama 服务地址：http://localhost:11434
+- 生成的 Wiki 知识库位置
+  C:\Users\Administrator\.adalflow\
+  ├── repos\ # 克隆的仓库源代码
+  ├── databases\ # 处理后的数据库文件
+  └── wikicache\ # 生成的 Wiki 缓存
+  └── [生成的 wiki 内容]
+
 ## Alternative using Dockerfile
 
 1. Build the docker image `docker build -f Dockerfile-ollama-local -t deepwiki:ollama-local .`
 2. Run the container:
+
    ```bash
    # For regular use
    docker run -p 3000:3000 -p 8001:8001 --name deepwiki \
      -v ~/.adalflow:/root/.adalflow \
      -e OLLAMA_HOST=your_ollama_host \
      deepwiki:ollama-local
-   
+
    # For local repository analysis
    docker run -p 3000:3000 -p 8001:8001 --name deepwiki \
      -v ~/.adalflow:/root/.adalflow \
@@ -108,15 +129,18 @@ When you select "Use Local Ollama", DeepWiki will:
 ## Troubleshooting
 
 ### "Cannot connect to Ollama server"
+
 - Make sure Ollama is running in the background. You can check by running `ollama list` in your terminal.
 - Verify that Ollama is running on the default port (11434)
 - Try restarting Ollama
 
 ### Slow generation
+
 - Local models are typically slower than cloud APIs. Consider using a smaller repository or a more powerful computer.
 - The `qwen3:1.7b` model is optimized for speed and quality balance. Larger models will be slower but may produce better results.
 
 ### Out of memory errors
+
 - If you encounter memory issues, try using a smaller model like `phi3:mini` instead of larger models.
 - Close other memory-intensive applications while running Ollama
 
@@ -155,6 +179,7 @@ Similarly, you can change the embedding model:
 ### Hardware Requirements
 
 For optimal performance with Ollama:
+
 - **CPU**: 4+ cores recommended
 - **RAM**: 8GB minimum, 16GB+ recommended
 - **Storage**: 10GB+ free space for models
@@ -162,11 +187,11 @@ For optimal performance with Ollama:
 
 ### Model Selection Guide
 
-| Model | Size | Speed | Quality | Use Case |
-|-------|------|-------|---------|----------|
-| phi3:mini | 1.3GB | Fast | Good | Small projects, quick testing |
-| qwen3:1.7b | 3.8GB | Medium | Better | Default, good balance |
-| llama3:8b | 8GB | Slow | Best | Complex projects, detailed analysis |
+| Model      | Size  | Speed  | Quality | Use Case                            |
+| ---------- | ----- | ------ | ------- | ----------------------------------- |
+| phi3:mini  | 1.3GB | Fast   | Good    | Small projects, quick testing       |
+| qwen3:1.7b | 3.8GB | Medium | Better  | Default, good balance               |
+| llama3:8b  | 8GB   | Slow   | Best    | Complex projects, detailed analysis |
 
 ## Limitations
 
