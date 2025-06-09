@@ -86,10 +86,10 @@ npm run dev
 - 前端启动命令：`npm run dev`
 - Ollama 服务地址：http://localhost:11434
 - 生成的 Wiki 知识库位置
-  C:\Users\Administrator\.adalflow\
+  C:\Users\Administrator\AppData\Roaming\adalflow\
   ├── repos\ # 克隆的仓库源代码
   ├── databases\ # 处理后的数据库文件
-  └── wikicache\ # 生成的 Wiki 缓存
+  C:\Users\Administrator\.adalflow\wikicache
   └── [生成的 wiki 内容]
 
 ## Alternative using Dockerfile
