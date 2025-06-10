@@ -1,5 +1,5 @@
 {
-  "default_provider": "openrouter",
+  "default_provider": "google",
   "providers": {
     "google": {
       "default_model": "gemini-2.0-flash",
@@ -49,52 +49,40 @@
       }
     },
     "openrouter": {
-      "default_model": "qwen/qwen3-32b:free",
+      "default_model": "openai/gpt-4o",
       "supportsCustomModel": true,
       "models": {
-        "qwen/qwen3-32b:free": {
+        "openai/gpt-4o": {
           "temperature": 0.7,
           "top_p": 0.8
         },
-        "openai/gpt-4o": {
-          "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
-        },
         "deepseek/deepseek-r1": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "openai/gpt-4.1": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "openai/o1": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "openai/o3": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "openai/o4-mini": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "anthropic/claude-3.7-sonnet": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         },
         "anthropic/claude-3.5-sonnet": {
           "temperature": 0.7,
-          "top_p": 0.8,
-          "max_tokens": 2000
+          "top_p": 0.8
         }
       }
     },

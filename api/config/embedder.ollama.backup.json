@@ -1,8 +1,8 @@
 {
   "embedder": {
-    "client_class": "CustomOllamaClient",
+    "client_class": "OllamaClient",
     "initialize_kwargs": {
-      "host": "http://localhost:11434"
+      "host": "${OLLAMA_HOST}"
     },
     "model_kwargs": {
       "model": "nomic-embed-text"

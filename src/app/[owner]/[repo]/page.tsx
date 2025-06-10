@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
-import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { FaExclamationTriangle, FaBookOpen, FaGithub, FaGitlab, FaBitbucket, FaDownload, FaFileExport, FaHome, FaFolder, FaSync, FaChevronUp, FaChevronDown, FaComments, FaTimes } from 'react-icons/fa';
-import Link from 'next/link';
-import ThemeToggle from '@/components/theme-toggle';
-import Markdown from '@/components/Markdown';
 import Ask from '@/components/Ask';
+import Markdown from '@/components/Markdown';
 import ModelSelectionModal from '@/components/ModelSelectionModal';
+import ThemeToggle from '@/components/theme-toggle';
 import WikiTreeView from '@/components/WikiTreeView';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { RepoInfo } from '@/types/repoinfo';
-import { extractUrlDomain, extractUrlPath } from '@/utils/urlDecoder';
 import getRepoUrl from '@/utils/getRepoUrl';
+import { extractUrlDomain, extractUrlPath } from '@/utils/urlDecoder';
+import Link from 'next/link';
+import { useParams, useSearchParams } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FaBitbucket, FaBookOpen, FaComments, FaDownload, FaExclamationTriangle, FaFileExport, FaFolder, FaGithub, FaGitlab, FaHome, FaSync, FaTimes } from 'react-icons/fa';
 // Define the WikiSection and WikiStructure types directly in this file
 // since the imported types don't have the sections and rootSections properties
 interface WikiSection {
@@ -130,11 +130,13 @@ const addTokensToRequestBody = (
 
 const createGithubHeaders = (githubToken: string): HeadersInit => {
   const headers: HeadersInit = {
-    'Accept': 'application/vnd.github.v3+json'
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'DeepWiki-App'
   };
 
   if (githubToken) {
-    headers['Authorization'] = `Bearer ${githubToken}`;
+    // GitHub personal access tokens should use 'token' prefix, not 'Bearer'
+    headers['Authorization'] = `token ${githubToken}`;
   }
 
   return headers;
@@ -822,8 +824,10 @@ IMPORTANT:
       responseText = responseText.replace(/^```(?:xml)?\s*/i, '').replace(/```\s*$/i, '');
 
       // Extract wiki structure from response
+      console.log('Raw response text:', responseText.substring(0, 500) + '...');
       const xmlMatch = responseText.match(/<wiki_structure>[\s\S]*?<\/wiki_structure>/m);
       if (!xmlMatch) {
+        console.error('No XML match found in response. Full response:', responseText);
         throw new Error('No valid XML found in response');
       }
 
@@ -1085,28 +1089,55 @@ IMPORTANT:
         }
       } else if (effectiveRepoInfo.type === 'github') {
         // GitHub API approach
-        // Try to get the tree data for common branch names
+        // First, try to get repository info to determine the default branch
         let treeData = null;
         let apiErrorDetails = '';
+        let defaultBranch = 'main'; // fallback default
 
-        for (const branch of ['main', 'master']) {
+        const headers = createGithubHeaders(currentToken);
+
+        // Step 1: Get repository information to find the default branch
+        console.log(`Fetching repository information for ${owner}/${repo}`);
+        try {
+          const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
+          const repoResponse = await fetch(repoInfoUrl, { headers });
+
+          if (repoResponse.ok) {
+            const repoData = await repoResponse.json();
+            defaultBranch = repoData.default_branch || 'main';
+            console.log(`Repository default branch: ${defaultBranch}`);
+          } else {
+            const errorData = await repoResponse.text();
+            console.warn(`Could not fetch repository info (${repoResponse.status}): ${errorData}`);
+            // Continue with fallback branches
+          }
+        } catch (err) {
+          console.warn('Error fetching repository info, using fallback branches:', err);
+        }
+
+        // Step 2: Try to get the tree data, starting with default branch
+        const branchesToTry = [defaultBranch, 'main', 'master'].filter((branch, index, arr) => arr.indexOf(branch) === index);
+
+        for (const branch of branchesToTry) {
           const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-          const headers = createGithubHeaders(currentToken);
 
           console.log(`Fetching repository structure from branch: ${branch}`);
           try {
-            const response = await fetch(apiUrl, {
-              headers
-            });
+            const response = await fetch(apiUrl, { headers });
 
             if (response.ok) {
               treeData = await response.json();
-              console.log('Successfully fetched repository structure');
+              console.log(`Successfully fetched repository structure from branch: ${branch}`);
               break;
             } else {
               const errorData = await response.text();
               apiErrorDetails = `Status: ${response.status}, Response: ${errorData}`;
-              console.error(`Error fetching repository structure: ${apiErrorDetails}`);
+              console.error(`Error fetching repository structure from ${branch}: ${apiErrorDetails}`);
+
+              // If it's a 404 and we have a token, it might be a permissions issue
+              if (response.status === 404 && currentToken) {
+                console.error(`404 error with token - this might indicate insufficient permissions or the repository doesn't exist`);
+              }
             }
           } catch (err) {
             console.error(`Network error fetching branch ${branch}:`, err);
@@ -1115,7 +1146,16 @@ IMPORTANT:
 
         if (!treeData || !treeData.tree) {
           if (apiErrorDetails) {
-            throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}`);
+            // Provide more specific error messages based on status codes
+            if (apiErrorDetails.includes('Status: 404')) {
+              throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}. This could mean: 1) The repository doesn't exist, 2) It's private and your token doesn't have access, or 3) The token is invalid.`);
+            } else if (apiErrorDetails.includes('Status: 401')) {
+              throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}. Authentication failed - please check your GitHub token.`);
+            } else if (apiErrorDetails.includes('Status: 403')) {
+              throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}. Access forbidden - your token may not have sufficient permissions.`);
+            } else {
+              throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}`);
+            }
           } else {
             throw new Error('Could not fetch repository structure. Repository might not exist, be empty or private.');
           }

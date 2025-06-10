@@ -172,6 +172,7 @@ class OpenRouterClient(ModelClient):
                                     if "message" in choice and "content" in choice["message"]:
                                         content = choice["message"]["content"]
                                         log.info("Successfully retrieved response")
+                                        log.info(f"Response content preview: {content[:200]}...")
 
                                         # Check if the content is XML and ensure it's properly formatted
                                         if content.strip().startswith("<") and ">" in content:

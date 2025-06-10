@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 from api.openai_client import OpenAIClient
 from api.openrouter_client import OpenRouterClient
 from api.bedrock_client import BedrockClient
+from api.custom_ollama_client import CustomOllamaClient
 from adalflow import GoogleGenAIClient, OllamaClient
 
 # Get API keys from environment variables
@@ -51,6 +52,7 @@ CLIENT_CLASSES = {
     "OpenAIClient": OpenAIClient,
     "OpenRouterClient": OpenRouterClient,
     "OllamaClient": OllamaClient,
+    "CustomOllamaClient": CustomOllamaClient,
     "BedrockClient": BedrockClient
 }
 
@@ -166,14 +168,14 @@ def is_ollama_embedder():
     if not embedder_config:
         return False
 
-    # Check if model_client is OllamaClient
+    # Check if model_client is OllamaClient or CustomOllamaClient
     model_client = embedder_config.get("model_client")
     if model_client:
-        return model_client.__name__ == "OllamaClient"
+        return model_client.__name__ in ["OllamaClient", "CustomOllamaClient"]
 
     # Fallback: check client_class string
     client_class = embedder_config.get("client_class", "")
-    return client_class == "OllamaClient"
+    return client_class in ["OllamaClient", "CustomOllamaClient"]
 
 # Load repository and file filters configuration
 def load_repo_config():
